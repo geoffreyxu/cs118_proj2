@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <errno.h>
 
 #include "utils.h"
 
@@ -71,7 +72,58 @@ int main(int argc, char *argv[]) {
     }
 
     // TODO: Read from file, and initiate reliable data transfer to the server
+    
+    // Initialize timeout values
+    tv.tv_usec = 0;
+    tv.tv_sec = TIMEOUT; 
 
+    ssize_t bytes_read;
+    ssize_t bytes_sent;
+    ssize_t bytes_recv;
+
+    while (1) {
+        bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
+        last = feof(fp) ? 1 : 0;
+
+        // Create a data packet
+        create_data_packet(&pkt, seq_num, buffer, bytes_read, last);
+        bytes_sent = sendto(send_sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
+
+        if (bytes_sent < 0) {
+            perror("Error sending data");
+            break;
+        }
+
+        // Wait for acknowledgment
+        setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+        bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&server_addr_from, &addr_size);
+
+        if (bytes_recv < 0) {
+            // Handle timeout or other errors
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Timeout, handle retransmission or other actions
+                printf("Timeout: Retransmitting...\n");
+                continue;
+            } else {
+                perror("Error receiving acknowledgment");
+                break;
+            }
+        }
+
+        // Process acknowledgment
+        if (ack_pkt.ack == 1 && ack_pkt.acknum == seq_num) {
+            printf("Acknowledgment received for sequence number %d\n", seq_num);
+            seq_num++;
+        } else {
+            printf("Incorrect acknowledgment received. Retransmit\n");
+        }
+
+        if (last) {
+            // All data sent, break from the loop
+            break;
+        }
+    }
  
     
     fclose(fp);
