@@ -52,8 +52,26 @@ int main() {
     FILE *fp = fopen("output.txt", "wb");
 
     // TODO: Receive file from the client and save it as output.txt
+    ssize_t bytes_recv;
+    struct packet pkt;
+    while (1) {
+        if (bytes_recv = recvfrom(listen_sockfd, (void *)&pkt, sizeof(pkt), 0, (struct sockaddr *)&client_addr_from, &addr_size) < 0) {
+            perror("Error when retrieving the packet\n");
+            close(listen_sockfd);
+            close(send_sockfd);
+            return 1;
+        }
+        else {
+            if (expected_seq_num == pkt.seqnum) {
+                send_ack(send_sockfd, client_addr_to, pkt.acknum, pkt.seqnum);
+                expected_seq_num += 1;
+            }
+            else {
+                
+            }
+        }
 
-    
+    } 
 
     fclose(fp);
     close(listen_sockfd);
