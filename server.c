@@ -67,7 +67,8 @@ int main() {
     // TODO: Receive file from the client and save it as output.txt
     //struct packet *pkt_cache;
     ssize_t bytes_recv;
-    int seq_num, ack_num = 0;
+    int seq_num = 0;
+    int ack_num = 0;
    // int n;
   /* if (connect(send_sockfd, (struct sockaddr *)&client_addr_to, sizeof(client_addr_to)) < 0) {
         perror("Client failed to connect to proxy server");
@@ -83,6 +84,13 @@ int main() {
             close(send_sockfd);
             break;
         }
+
+        //Write received data to output
+        printf("Expected Pkt #%d; Pkt #%d received\n", seq_num, buffer.seqnum);
+        if(buffer.seqnum == seq_num){
+            fwrite(buffer.payload, 1, buffer.length, fp);
+        }
+
         if (buffer.last == 1) {
             send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
             break;
