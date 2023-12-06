@@ -67,7 +67,8 @@ int main() {
     // TODO: Receive file from the client and save it as output.txt
     //struct packet *pkt_cache;
     ssize_t bytes_recv;
-    int seq_num, ack_num = 0;
+   // int seq_num = 0;
+    //int ack_num = 0;
    // int n;
   /* if (connect(send_sockfd, (struct sockaddr *)&client_addr_to, sizeof(client_addr_to)) < 0) {
         perror("Client failed to connect to proxy server");
@@ -76,24 +77,29 @@ int main() {
         close(send_sockfd);
         return 1;
     }*/
+    int error_cond = 0;
     while (1) {
         if ((bytes_recv = recvfrom(listen_sockfd, &buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr_from, &addr_size)) < 0) {
             perror("Error retrieving the packet\n");
             close(listen_sockfd);
             close(send_sockfd);
+            error_cond = 1;
             break;
         }
         if (buffer.last == 1) {
             send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
             break;
         }
-        if (buffer.seqnum < seq_num) {
+        if (buffer.seqnum == expected_seq_num) {
+            fprintf(fp, "%s", buffer.payload);
+        }
+        else if (buffer.seqnum < expected_seq_num) {
             send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
             continue;
         }
         send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
-        ack_num = buffer.acknum + 1;
-        seq_num = buffer.seqnum + 1;
+        //ack_num = buffer.acknum + 1;
+        expected_seq_num = buffer.seqnum + 1;
         /*fwrite(buffer.payload, 1, buffer.length, fp);
         printf("Pkt #%d received\n", buffer.seqnum);
         if (expected_seq_num == buffer.seqnum) {
@@ -105,7 +111,8 @@ int main() {
         }*/
 
     } 
-    printf("Success: closing server");
+    if (!error_cond) 
+        printf("Success: closing server");
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);
