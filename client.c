@@ -81,12 +81,17 @@ int main(int argc, char *argv[]) {
     ssize_t bytes_sent;
     ssize_t bytes_recv;
 
-    while (1) {
-        bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
-        last = feof(fp) ? 1 : 0;
+    int last_transmit_success = 1;
 
-        // Create a data packet
-        create_data_packet(&pkt, seq_num, buffer, bytes_read, last);
+    while (1) {
+        
+        if(last_transmit_success){
+            bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
+            last = feof(fp) ? 1 : 0;
+            // Create a data packet
+            build_packet(&pkt, seq_num, ack_num, last, ack, bytes_read, buffer);
+        }
+
         bytes_sent = sendto(send_sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
 
         if (bytes_sent < 0) {
@@ -104,6 +109,7 @@ int main(int argc, char *argv[]) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // Timeout, handle retransmission or other actions
                 printf("Timeout: Retransmitting...\n");
+                last_transmit_success = 0;
                 continue;
             } else {
                 perror("Error receiving acknowledgment");
@@ -115,12 +121,16 @@ int main(int argc, char *argv[]) {
         if (ack_pkt.ack == 1 && ack_pkt.acknum == seq_num) {
             printf("Acknowledgment received for sequence number %d\n", seq_num);
             seq_num++;
+            ack_num++;
+            last_transmit_success = 1;
         } else {
             printf("Incorrect acknowledgment received. Retransmit\n");
+            last_transmit_success = 0;
         }
 
         if (last) {
             // All data sent, break from the loop
+            printf("Success: All data sent\n");
             break;
         }
     }
