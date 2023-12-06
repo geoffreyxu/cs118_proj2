@@ -6,6 +6,19 @@
 
 #include "utils.h"
 
+void send_ack(int sock_fd, struct packet* pkt, struct sockaddr_in addr, unsigned short ack_num, unsigned short seq_num, char last, char ack) {
+    char payload[PAYLOAD_SIZE];
+    memcpy(payload, (char*)&ack_num, sizeof(unsigned int));
+    build_packet(pkt, seq_num, ack_num, last, ack, PAYLOAD_SIZE, payload);
+    if (sendto(sock_fd, pkt, sizeof(*pkt), 0, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        perror("Error sending ACK");
+       // close(sock_fd);
+        return;
+    }
+    memset(payload, 0, PAYLOAD_SIZE);
+    return;
+}
+
 int main() {
     int listen_sockfd, send_sockfd;
     struct sockaddr_in server_addr, client_addr_from, client_addr_to;
@@ -52,27 +65,47 @@ int main() {
     FILE *fp = fopen("output.txt", "wb");
 
     // TODO: Receive file from the client and save it as output.txt
+    //struct packet *pkt_cache;
     ssize_t bytes_recv;
-    struct packet pkt;
+    int seq_num, ack_num = 0;
+   // int n;
+  /* if (connect(send_sockfd, (struct sockaddr *)&client_addr_to, sizeof(client_addr_to)) < 0) {
+        perror("Client failed to connect to proxy server");
+        fclose(fp);
+        close(listen_sockfd);
+        close(send_sockfd);
+        return 1;
+    }*/
     while (1) {
-        if (bytes_recv = recvfrom(listen_sockfd, (void *)&pkt, sizeof(pkt), 0, (struct sockaddr *)&client_addr_from, &addr_size) < 0) {
-            perror("Error when retrieving the packet\n");
+        if ((bytes_recv = recvfrom(listen_sockfd, &buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr_from, &addr_size)) < 0) {
+            perror("Error retrieving the packet\n");
             close(listen_sockfd);
             close(send_sockfd);
-            return 1;
+            break;
         }
-        else {
-            if (expected_seq_num == pkt.seqnum) {
-                send_ack(send_sockfd, client_addr_to, pkt.acknum, pkt.seqnum);
-                expected_seq_num += 1;
-            }
-            else {
-                
-            }
+        if (buffer.last == 1) {
+            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+            break;
         }
+        if (buffer.seqnum < seq_num) {
+            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+            continue;
+        }
+        send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+        ack_num = buffer.acknum + 1;
+        seq_num = buffer.seqnum + 1;
+        /*fwrite(buffer.payload, 1, buffer.length, fp);
+        printf("Pkt #%d received\n", buffer.seqnum);
+        if (expected_seq_num == buffer.seqnum) {
+            memcpy(&(pkt_cache[buffer.seqnum - expected_seq_num]), &buffer, sizeof(struct packet));
+            if (buffer.last == 1) {
+                build_packet(&ack_pkt, 0, expected_seq_num, 0, 1, "", -1);
+                break;
+            }   
+        }*/
 
     } 
-
+    printf("Success: closing server");
     fclose(fp);
     close(listen_sockfd);
     close(send_sockfd);
