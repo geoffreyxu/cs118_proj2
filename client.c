@@ -81,54 +81,82 @@ int main(int argc, char *argv[]) {
     ssize_t bytes_sent;
     ssize_t bytes_recv;
 
+    int cwnd = 0; //will be incremented to 1 in first iteration
+    int ssh = 6;
+    int expected_ack_num = ack_num;
     int last_transmit_success = 1;
+    ssize_t batch_bytes = 0;
 
     while (1) {
-        
-        if(last_transmit_success){
-            bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
-            last = feof(fp) ? 1 : 0;
-            // Create a data packet
-            build_packet(&pkt, seq_num, ack_num, last, ack, bytes_read, buffer);
+
+        if (!last_transmit_success){
+            seq_num -= cwnd;
+            ack_num -= cwnd;
+            fseek(fp, -batch_bytes, SEEK_CUR);
+            cwnd /= 2; //AIMD - Multiplicative Decrease
+        }
+        else{
+            cwnd++;
         }
 
-        bytes_sent = sendto(send_sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
+        if (cwnd < 1) cwnd = 1;
 
-        if (bytes_sent < 0) {
-            perror("Error sending data");
-            break;
+        batch_bytes = 0;
+        last_transmit_success = 1;
+
+        //Create and send batch of packets
+        for (int i = 0; i < cwnd && !last; i++){
+            bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
+            last = feof(fp) ? 1 : 0;
+            build_packet(&pkt, seq_num, ack_num, last, ack, bytes_read, buffer);
+            bytes_sent = sendto(send_sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
+            
+            if (bytes_sent < 0) {
+                perror("Error sending data");
+                break;
+            }
+
+            printf("Sending packet %d\n", seq_num);
+
+            batch_bytes += bytes_read;
+            seq_num++;
+            ack_num++;
+
+            sleep(0.1);
         }
 
         // Wait for acknowledgment
         setsockopt(listen_sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-        bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&server_addr_from, &addr_size);
+        for (int i = 0; i < cwnd; i++){
+            
+            bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&server_addr_from, &addr_size);
 
-        if (bytes_recv < 0) {
-            // Handle timeout or other errors
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // Timeout, handle retransmission or other actions
-                printf("Timeout: Retransmitting...\n");
-                last_transmit_success = 0;
-                continue;
+            if (bytes_recv < 0) {
+                // Handle timeout or other errors
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    // Timeout, handle retransmission or other actions
+                    printf("Expected Ack: %d; Timeout: Retransmitting...\n", expected_ack_num, seq_num);
+                    if (expected_ack_num <= seq_num)
+                        last_transmit_success = 0;
+                    break;
+                } else {
+                    perror("Error receiving acknowledgment");
+                    break;
+                }
+            }
+
+            // Process acknowledgment
+            if (ack_pkt.ack == 1 && ack_pkt.acknum >= expected_ack_num) {
+                printf("Acknowledgment received: %d\n", expected_ack_num);
+                expected_ack_num = ack_pkt.acknum + 1;
             } else {
-                perror("Error receiving acknowledgment");
-                break;
+                printf("Expected: %d, Received: %d. Incorrect acknowledgment received. Retransmit\n", expected_ack_num, ack_pkt.acknum);
+                //last_transmit_success = 0;
             }
         }
 
-        // Process acknowledgment
-        if (ack_pkt.ack == 1 && ack_pkt.acknum == seq_num) {
-            printf("Acknowledgment received for sequence number %d\n", seq_num);
-            seq_num++;
-            ack_num++;
-            last_transmit_success = 1;
-        } else {
-            printf("Incorrect acknowledgment received. Retransmit\n");
-            last_transmit_success = 0;
-        }
-
-        if (last) {
+        if (last && last_transmit_success) {
             // All data sent, break from the loop
             printf("Success: All data sent\n");
             break;

@@ -90,22 +90,21 @@ int main() {
         }
 
         //Write received data to output
-        
         printf("Expected Pkt #%d; Pkt #%d received\n", expected_seq_num, buffer.seqnum);
-        if(buffer.seqnum == expected_seq_num){
-            fwrite(buffer.payload, 1, buffer.length, fp);
-        }
-        if (buffer.last == 1) {
-            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
-            break;
-        }
-        else if (buffer.seqnum < expected_seq_num) {
-            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+        
+        if (buffer.seqnum < expected_seq_num) {
+            send_ack(send_sockfd, &ack_pkt, client_addr_to, expected_seq_num, expected_seq_num, 0, 1);
             continue;
         }
-        send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+        else if(buffer.seqnum == expected_seq_num){
+            fwrite(buffer.payload, 1, buffer.length, fp);
+            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum + 1, buffer.seqnum + 1, 0, 1);
+            expected_seq_num = buffer.seqnum + 1;
+            if (buffer.last == 1) {
+                break;
+            }
+        }
         //ack_num = buffer.acknum + 1;
-        expected_seq_num = buffer.seqnum + 1;
         /*fwrite(buffer.payload, 1, buffer.length, fp);
         printf("Pkt #%d received\n", buffer.seqnum);
         if (expected_seq_num == buffer.seqnum) {
