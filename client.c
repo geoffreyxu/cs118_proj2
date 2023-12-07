@@ -90,10 +90,17 @@ int main(int argc, char *argv[]) {
     while (1) {
 
         if (!last_transmit_success){
-            seq_num -= cwnd;
-            ack_num -= cwnd;
+            if (last){
+                seq_num -= batch_bytes/PAYLOAD_SIZE + 1;
+                ack_num -= batch_bytes/PAYLOAD_SIZE + 1;
+            }
+            else{
+                seq_num -= cwnd;
+                ack_num -= cwnd;
+            }
             fseek(fp, -batch_bytes, SEEK_CUR);
             cwnd /= 2; //AIMD - Multiplicative Decrease
+            last = 0;
         }
         else{
             cwnd++;
@@ -156,7 +163,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (last && last_transmit_success) {
+        if (last && expected_ack_num == seq_num + 1) {
             // All data sent, break from the loop
             printf("Success: All data sent\n");
             break;
