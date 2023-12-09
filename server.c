@@ -8,7 +8,7 @@
 
 void send_ack(int sock_fd, struct packet* pkt, struct sockaddr_in addr, unsigned short ack_num, unsigned short seq_num, char last, char ack) {
     char payload[PAYLOAD_SIZE];
-    memcpy(payload, (char*)&ack_num, sizeof(unsigned int));
+    memcpy(payload, (char*)&ack_num, sizeof(unsigned short));
     build_packet(pkt, seq_num, ack_num, last, ack, PAYLOAD_SIZE, payload);
     if (sendto(sock_fd, pkt, sizeof(*pkt), 0, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("Error sending ACK");
@@ -25,7 +25,7 @@ int main() {
     struct packet buffer;
     socklen_t addr_size = sizeof(client_addr_from);
     int expected_seq_num = 0;
-    int recv_len;
+    //int recv_len;
     struct packet ack_pkt;
     int recv_window[FULL_WIND_SIZE];
     struct packet buffer_wind[FULL_WIND_SIZE];
@@ -89,11 +89,11 @@ int main() {
             recv_window[expected_seq_num] = 1;
             buffer_wind[expected_seq_num] = buffer;
             for (; i < FULL_WIND_SIZE && recv_window[i] == 1; i++) {
-                printf("%d\n", i);
+              //  printf("%d\n", i);
                 struct packet pkt = buffer_wind[i];
                 fwrite(pkt.payload, 1, pkt.length, fp);
                 if (pkt.last == 1) {
-                    send_ack(send_sockfd, &ack_pkt, client_addr_to, pkt.acknum + 1, pkt.seqnum + 1, 0, 1);
+                    send_ack(send_sockfd, &ack_pkt, client_addr_to, pkt.acknum + 1, pkt.seqnum + 1, 1, 1);
                     fclose(fp);
                     close(listen_sockfd);
                     close(send_sockfd);
@@ -102,6 +102,7 @@ int main() {
             }
             ack_pkt.acknum = i;
             expected_seq_num = i;
+            printf("ACK #%d sent\n", buffer.acknum + 1);
             send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum + 1, buffer.seqnum + 1, 0, 1);
         }
         else {
@@ -112,7 +113,7 @@ int main() {
             }
             ack_pkt.acknum = expected_seq_num;
             printf("ACK #%d. Wrong seq #%d\n", expected_seq_num, buffer.seqnum);
-            send_ack(send_sockfd, &ack_pkt, client_addr_to, buffer.acknum, buffer.seqnum, 0, 1);
+            send_ack(send_sockfd, &ack_pkt, client_addr_to, ack_pkt.acknum, ack_pkt.seqnum, 0, 1);
         }
 
     } 
