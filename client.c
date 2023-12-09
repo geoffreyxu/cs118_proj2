@@ -8,6 +8,18 @@
 
 #include "utils.h"
 
+/*long int find_num_packets(FILE* fp) {
+    long int file_len;
+    long int num_packets;
+    fseek(fp, 0, SEEK_END);
+    num_packets = ftell(fp) / PAYLOAD_SIZE + (file_len % PAYLOAD_SIZE);
+}*/
+
+/*int check_timeout(double start_time) {
+    struct timeval ntv;
+    gettimeofday(&ntv, NULL);
+    return ((ntv.tv_sec + ntv.tv_usec / 1000000.0) - start_time >= TIMEOUT);
+}*/
 
 int main(int argc, char *argv[]) {
     int listen_sockfd, send_sockfd;
@@ -19,6 +31,7 @@ int main(int argc, char *argv[]) {
     char buffer[PAYLOAD_SIZE];
     unsigned short seq_num = 0;
     unsigned short ack_num = 0;
+
     char last = 0;
     char ack = 0;
 
@@ -87,7 +100,28 @@ int main(int argc, char *argv[]) {
     int last_transmit_success = 1;
     ssize_t batch_bytes = 0;
 
+    int num_dup_acks = 0;
+    int dup_ack = -1;
+    //long int num_packets = find_num_packets(fp);
+    //struct packet curr_pkt;
+   // struct packet pkt_window[num_packets];
+  //  curr_pkt = pkt_window[0];
+    int start = 0;
+    int end = 0;
     while (1) {
+
+       /* if (check_timeout(pkt_window[start].start_time)) {
+            ssh = MAX(cwnd / 2, 2);
+            cwnd = 1;
+            curr_pkt = pkt_window[start];
+            struct timeval temp_tv;
+            gettimeofday(&temp_tv, NULL);
+            double start_time = temp_tv.tv_sec + temp_tv.tv_usec;
+            curr_pkt.start_time = start_time;
+            bytes_sent = sendto(send_sockfd, &curr_pkt, sizeof(curr_pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
+            printf("Packet #%d lost, retransmitting\n", curr_pkt.seqnum);
+            end = start;
+        }*/
 
         if (!last_transmit_success){
             if (last){
@@ -107,17 +141,16 @@ int main(int argc, char *argv[]) {
         }
 
         if (cwnd < 1) cwnd = 1;
-
+        
         batch_bytes = 0;
         last_transmit_success = 1;
 
         //Create and send batch of packets
-        for (int i = 0; i < cwnd && !last; i++){
+        for (int i = 0; i < cwnd && !last; i++) {
             bytes_read = fread(buffer, 1, PAYLOAD_SIZE, fp);
             last = feof(fp) ? 1 : 0;
             build_packet(&pkt, seq_num, ack_num, last, ack, bytes_read, buffer);
             bytes_sent = sendto(send_sockfd, &pkt, sizeof(pkt), 0, (struct sockaddr*)&server_addr_to, sizeof(server_addr_to));
-            
             if (bytes_sent < 0) {
                 perror("Error sending data");
                 break;
@@ -138,7 +171,7 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < cwnd; i++){
             
             bytes_recv = recvfrom(listen_sockfd, &ack_pkt, sizeof(ack_pkt), 0, (struct sockaddr*)&server_addr_from, &addr_size);
-
+        
             if (bytes_recv < 0) {
                 // Handle timeout or other errors
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -152,7 +185,6 @@ int main(int argc, char *argv[]) {
                     break;
                 }
             }
-
             // Process acknowledgment
             if (ack_pkt.ack == 1 && ack_pkt.acknum >= expected_ack_num) {
                 printf("Acknowledgment received: %d\n", expected_ack_num);
@@ -162,7 +194,6 @@ int main(int argc, char *argv[]) {
                 //last_transmit_success = 0;
             }
         }
-
         if (last && expected_ack_num == seq_num + 1) {
             // All data sent, break from the loop
             printf("Success: All data sent\n");
