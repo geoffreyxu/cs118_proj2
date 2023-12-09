@@ -15,7 +15,7 @@
 #define WINDOW_SIZE 5
 #define TIMEOUT 1
 #define MAX_SEQUENCE 1024
-
+#define FULL_WIND_SIZE 2000
 
 
 // Packet Layout
@@ -27,6 +27,7 @@ struct packet {
     char last;
     unsigned int length;
     char payload[PAYLOAD_SIZE];
+    double start_time;
 };
 
 // Utility function to build a packet
