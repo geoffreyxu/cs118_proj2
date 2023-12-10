@@ -96,9 +96,10 @@ int main(int argc, char *argv[]) {
 
     int cwnd = 0; //will be incremented to 1 in first iteration
     int ssh = 6;
-    int expected_ack_num = ack_num;
+    int expected_ack_num = 1;
     int last_transmit_success = 1;
     ssize_t batch_bytes = 0;
+    int seek_bytes = 0;
 
     int num_dup_acks = 0;
     int dup_ack = -1;
@@ -125,14 +126,16 @@ int main(int argc, char *argv[]) {
 
         if (!last_transmit_success){
             if (last){
+                seek_bytes = -batch_bytes;
                 seq_num -= batch_bytes/PAYLOAD_SIZE + 1;
                 ack_num -= batch_bytes/PAYLOAD_SIZE + 1;
             }
             else{
-                seq_num -= cwnd;
-                ack_num -= cwnd;
+                seek_bytes = (expected_ack_num - seq_num - 1) * PAYLOAD_SIZE;
+                seq_num = expected_ack_num - 1;
+                ack_num = expected_ack_num - 1;
             }
-            fseek(fp, -batch_bytes, SEEK_CUR);
+            fseek(fp, seek_bytes, SEEK_CUR);
             cwnd /= 2; //AIMD - Multiplicative Decrease
             last = 0;
         }
@@ -176,7 +179,7 @@ int main(int argc, char *argv[]) {
                 // Handle timeout or other errors
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     // Timeout, handle retransmission or other actions
-                    printf("Expected Ack: %d; Timeout: Retransmitting...\n", expected_ack_num, seq_num);
+                    printf("Expected Ack: %d; Timeout: Retransmitting...\n", expected_ack_num);
                     if (expected_ack_num <= seq_num)
                         last_transmit_success = 0;
                     break;
@@ -192,6 +195,7 @@ int main(int argc, char *argv[]) {
             } else {
                 printf("Expected: %d, Received: %d. Incorrect acknowledgment received. Retransmit\n", expected_ack_num, ack_pkt.acknum);
                 //last_transmit_success = 0;
+                //break;
             }
         }
         if (last && expected_ack_num == seq_num + 1) {
